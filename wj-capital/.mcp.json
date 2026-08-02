@@ -2,10 +2,7 @@
   "mcpServers": {
     "wj-finance": {
       "command": "${CLAUDE_PLUGIN_ROOT}/mcp/.venv/bin/python",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/finance_server.py"],
-      "env": {
-        "SEC_EDGAR_USER_AGENT": "${SEC_EDGAR_USER_AGENT}"
-      }
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp/finance_server.py"]
     }
   }
 }
