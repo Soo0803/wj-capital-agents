@@ -1,5 +1,5 @@
 {
-  "name": "wj-capital-marketplace",
+  "name": "wj-capital-agents",
   "owner": { "name": "WJ Capital" },
   "description": "An AI value-investing firm for Claude Code — specialist research agents, adversarial review, a written doctrine, and primary-source financial data.",
   "plugins": [
