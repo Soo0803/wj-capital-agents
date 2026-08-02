@@ -5,7 +5,15 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
-MCP_DIR="wj-capital/mcp"
+
+# This script lives *inside* the plugin folder deliberately: Claude Code copies only
+# that folder into its install cache, so anything sitting at the repository root
+# never reaches an installed user. Both layouts are handled so it also works from a
+# fresh clone of the repo.
+if   [ -f "mcp/finance_server.py" ];            then MCP_DIR="mcp"
+elif [ -f "wj-capital/mcp/finance_server.py" ]; then MCP_DIR="wj-capital/mcp"
+else MCP_DIR="mcp"   # fall through to the error below
+fi
 VENV="$MCP_DIR/.venv"
 
 bold() { printf '\033[1m%s\033[0m\n' "$1"; }
@@ -13,7 +21,7 @@ warn() { printf '\033[33m%s\033[0m\n' "$1"; }
 fail() { printf '\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
 
 [ -f "$MCP_DIR/finance_server.py" ] || fail \
-  "Run this from the repository root — $MCP_DIR/finance_server.py not found."
+  "finance_server.py not found. Run this from the plugin folder or the repo root."
 
 # ---------------------------------------------------------------- 1. Python
 bold "1/3  Checking Python"
