@@ -18,7 +18,7 @@ record. It never decides, never predicts prices, and never places a trade.
 echo 'export SEC_EDGAR_USER_AGENT="Your Name you@example.com"' >> ~/.zshrc && exec zsh
 
 # 2. Install
-claude plugin marketplace add <your-github-user>/wj-capital-agents
+claude plugin marketplace add Soo0803/wj-capital-agents
 claude plugin install wj-capital@wj-capital-agents
 
 # 3. Build the finance server's virtualenv
