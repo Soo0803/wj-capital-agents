@@ -1,0 +1,26 @@
+# The MCP server's virtualenv is created locally by the user at install time
+# (see wj-capital/README.md step 2). It is ~50MB of platform-specific binaries and
+# must never be committed.
+wj-capital/mcp/.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# The finance server's on-disk cache of EDGAR/price responses
+.cache/
+
+# The firm's records are the user's own research and holdings. If someone clones
+# this repo and works inside it, their portfolio must not become a pull request.
+wj-records/
+
+# Local environment — SEC_EDGAR_USER_AGENT and anything else personal
+.env
+.env.*
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

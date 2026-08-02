@@ -1,0 +1,11 @@
+{
+  "name": "wj-capital-marketplace",
+  "owner": { "name": "WJ Capital" },
+  "plugins": [
+    {
+      "name": "wj-capital",
+      "source": "./wj-capital",
+      "description": "WJ Capital — AI value-investing firm: 8 specialist agents, 7 workflows, firm doctrine, and a primary-source finance data server (SEC EDGAR, 13F, global prices, FX)."
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "wj-capital",
+  "version": "0.1.0",
+  "description": "WJ Capital — an AI value-investing firm: 8 specialist research agents, disciplined workflows (triage, deep dive, red team, memo, portfolio review), the firm's written doctrine (philosophy, ground rules, 90-point checklist), and a primary-source finance data server (SEC EDGAR, 13F, global prices, FX). The human is the fund manager; the AI team does the research legwork and adversarial review.",
+  "author": { "name": "WJ Capital" },
+  "keywords": ["investing", "value-investing", "research", "finance", "agents"],
+  "license": "MIT"
+}
