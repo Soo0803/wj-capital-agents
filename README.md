@@ -1,4 +1,4 @@
-# WJ Capital
+# WJ Capital (Value Investing Agent)
 
 An AI value-investing firm you install into [Claude Code](https://claude.com/claude-code):
 eight specialist research agents, seven disciplined workflows, a written doctrine, and a
