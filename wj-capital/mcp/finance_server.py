@@ -115,16 +115,30 @@ def _err(msg: str, **extra):
 
 
 # ----------------------------------------------------------------------------- ticker/CIK mapping
+def _norm_ticker(t: str) -> str:
+    """Share classes are written three ways for the same security — BRK.B, BRK-B, BRKB.
+    SEC's file uses the hyphen; users and other data vendors use the dot or nothing.
+    Both the map keys and the lookups must be normalized the SAME way, or every
+    hyphenated ticker becomes unreachable."""
+    return t.upper().replace("-", "").replace(".", "")
+
+
 def _ticker_map():
     data = _sec_json("https://www.sec.gov/files/company_tickers.json", "company_tickers", 24 * 3600)
     out = {}
     for _, v in data.items():
-        out[v["ticker"].upper()] = {"cik": int(v["cik_str"]), "name": v["title"], "ticker": v["ticker"].upper()}
+        t = v["ticker"].upper()
+        entry = {"cik": int(v["cik_str"]), "name": v["title"], "ticker": t}
+        out[t] = entry
+        # Also index under the punctuation-stripped form so BRK.B and BRKB both land.
+        # setdefault so a real ticker is never shadowed by another's normalized form.
+        out.setdefault(_norm_ticker(t), entry)
     return out
 
 
 def _lookup_cik(ticker: str):
-    return _ticker_map().get(ticker.upper().replace("-", "").replace(".", ""))
+    tm = _ticker_map()
+    return tm.get(ticker.upper()) or tm.get(_norm_ticker(ticker))
 
 
 # Well-known superinvestor 13F filers (CIK numbers are stable public identifiers).
