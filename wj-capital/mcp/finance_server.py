@@ -146,7 +146,13 @@ SUPERINVESTORS = {
     "berkshire": (1067983, "Berkshire Hathaway (Buffett)"),
     "himalaya": (1709323, "Himalaya Capital (Li Lu)"),
     "baupost": (1061768, "Baupost Group (Klarman)"),
-    "pabrai": (1173334, "Dalal Street / Pabrai Funds (Pabrai)"),
+    # Dalal Street, LLC is the filer for Pabrai Investment Funds and has filed
+    # continuously since 2016. CIK 1173334 is MOHNISH PABRAI the individual, whose
+    # 13F history stops in 2012 — pointing here made the tool open a 2012 SC 13G/A
+    # folder that contains no information table, and report "no XML found" rather
+    # than "wrong filer". A plausible-looking CIK fails silently; verify new entries
+    # against a recent 13F-HR accession before adding them.
+    "pabrai": (1549575, "Dalal Street / Pabrai Funds (Pabrai)"),
     "oaktree": (949509, "Oaktree Capital (Marks)"),
     "aquamarine": (1426749, "Aquamarine Capital (Guy Spier)"),
     "greenlein": (1079114, "Sequoia / Ruane Cunniff"),
