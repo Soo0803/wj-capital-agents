@@ -156,13 +156,23 @@ SUPERINVESTORS = {
     "pabrai": (1549575, "Dalal Street / Pabrai Funds (Pabrai)"),
     "oaktree": (949509, "Oaktree Capital (Marks)"),
     "aquamarine": (1426749, "Aquamarine Capital (Guy Spier)"),
-    # CIK 1079114 is Greenlea Lane Capital, not Sequoia/Ruane Cunniff — the label
-    # was wrong as well as the key. Verified against the 13F: Green Brick Partners
-    # at ~29% is Greenlea Lane's signature position, and Ruane Cunniff files under
-    # its own CIK. Same failure mode as the Pabrai entry: a plausible mapping
-    # returns the WRONG manager silently rather than erroring, so verify any new
-    # row against a recent 13F-HR information table before adding it.
-    "greenlea": (1079114, "Greenlea Lane Capital [last filed 2024-02; may be below the $100M threshold]"),
+    # CIK 1079114 is GREENLIGHT CAPITAL (David Einhorn), verified against
+    # data.sec.gov/submissions. The original key "greenlein" was a corruption of
+    # Greenlight/Einhorn and the CIK was right; only the label was wrong.
+    #
+    # The trap worth recording: Greenlight's largest position is Green Brick
+    # Partners at ~29%, because Einhorn chairs it. That "Green" is why the entry
+    # was mislabelled twice — once as Sequoia/Ruane Cunniff, and once, during the
+    # attempted fix, as Greenlea Lane. Reading a holding and inferring the manager
+    # is how both errors happened. Resolve the CIK against SEC's own entity name.
+    #
+    # Last 13F-HR was 2024-02-14 ($2.05bn, so not a sub-threshold lapse —
+    # Greenlight appears to have stopped filing under this CIK). Flagged in the
+    # label so a caller is never silently handed stale holdings.
+    "greenlight": (1079114, "Greenlight Capital (Einhorn) [last filed 2024-02]"),
+    # Distinct entities, each with its own CIK and both currently active:
+    "greenlea": (1766504, "Greenlea Lane Capital Management"),
+    "ruane": (1720792, "Ruane, Cunniff & Goldfarb (Sequoia)"),
     "markel": (1096343, "Markel Gayner"),
     "tweedy": (732905, "Tweedy Browne"),
     "fairfax": (915191, "Fairfax Financial (Watsa)"),
@@ -506,13 +516,27 @@ def get_13f_holdings(manager: str, top_n: int = 25) -> str:
         a = agg.setdefault(k, {"issuer": k, "value_usd": 0, "cusip": r["cusip"]})
         a["value_usd"] += r["value_usd"]
     total = sum(a["value_usd"] for a in agg.values()) or 1
+
+    # Units are not consistent across filers. The 13F information table's <value>
+    # was reported in THOUSANDS before 2023 and in whole dollars after, and some
+    # agents still file the old way — Baupost's book reads 5,415,853 (thousands,
+    # ~$5.4bn) while Berkshire's reads 299,253,556,246 (dollars, ~$299bn). A field
+    # named *_usd that is sometimes thousands is worse than no field, so normalise
+    # and say which convention was detected. Percentages are unaffected either way
+    # because the ratio cancels.
+    #
+    # Threshold: a genuine dollar-denominated 13F is at least $100m by regulation,
+    # so a total below that is thousands. No real filer sits near the boundary.
+    units = "thousands" if total < 100_000_000 else "dollars"
+    scale = 1_000 if units == "thousands" else 1
     top = sorted(agg.values(), key=lambda x: -x["value_usd"])[:top_n]
     for t in top:
         t["pct_of_13f"] = round(100 * t["value_usd"] / total, 2)
+        t["value_usd"] = t["value_usd"] * scale
     return json.dumps({
         "source": f"SEC EDGAR 13F-HR information table, accession {acc}",
         "manager": label, "filed": filed, "positions_reported": len(agg),
-        "total_13f_value_usd": total, "top_holdings": top,
+        "total_13f_value_usd": total * scale, "reported_units": units, "top_holdings": top,
         "caveat": "45-day lag; US-listed longs only; values as filed.",
     })
 
