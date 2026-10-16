@@ -23,6 +23,7 @@ import time
 import html as html_lib
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -630,6 +631,217 @@ def screen_by_metric(concept: str = "Revenues", unit: str = "USD", year: int = 0
         "source": f"SEC XBRL frames {frame}", "concept": concept,
         "count_total": len(data.get("data", [])),
         "top200": [{"entity": r.get("entityName"), "cik": r.get("cik"), "val": r.get("val")} for r in rows],
+    })
+
+
+# ---------------------------------------------------------------- fetching documents
+# Everything above READS filings. These two SAVE them, because an analysis that
+# cites a document needs the document to still exist in a year — IR sites rotate
+# URLs and EDGAR's rendering changes. A local corpus is the audit trail.
+
+ANNUAL_FORMS = ("10-K", "20-F", "40-F")      # one of these per filer; FPIs use 20-F
+QUARTERLY_FORMS = ("10-Q", "6-K")            # 6-K is the FPI quarterly equivalent
+EARNINGS_ITEM = "2.02"                       # 8-K Item: Results of Operations
+
+# IR documents are hosted by a handful of providers. A URL outside this set is not
+# necessarily hostile, but it is worth a human look before saving it.
+KNOWN_IR_HOSTS = (
+    "q4cdn.com", "q4inc.com", "gcs-web.com", "equisolve.net",
+    "irdirect.net", "businesswire.com", "globenewswire.com",
+)
+
+_MAGIC = {b"%PDF": "pdf", b"PK\x03\x04": "zip/xlsx", b"\xd0\xcf\x11\xe0": "legacy-office"}
+
+
+def _sniff(data: bytes) -> str:
+    """What IS this, regardless of the extension it claims?"""
+    for magic, kind in _MAGIC.items():
+        if data.startswith(magic):
+            return kind
+    head = data[:400].lstrip().lower()
+    return "html" if head.startswith((b"<!doctype html", b"<html")) else "unknown"
+
+
+def _safe_name(s: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "-", s)
+
+
+def _dest_dir(ticker: str, dest_root: str) -> Path:
+    root = Path(dest_root).expanduser() if dest_root else Path.cwd() / "wj-records" / "sources"
+    d = root / _safe_name(ticker.upper())
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _earnings_exhibit(cik: int, accession: str) -> str:
+    """An 8-K's primary document is a cover page with no numbers on it. The press
+    release is an EX-99.1 exhibit inside the filing folder. Miss this and you save
+    a page that says 'a press release is attached'."""
+    acc = accession.replace("-", "")
+    base = f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc}"
+    try:
+        items = _get(f"{base}/index.json", headers=HEADERS_SEC).json()["directory"]["item"]
+    except Exception:
+        return ""
+    best, best_size = "", -1
+    for it in items:
+        name = it.get("name", "")
+        low = name.lower()
+        if not low.endswith((".htm", ".html")) or "index" in low:
+            continue
+        if "ex-99" in low or "ex99" in low:
+            return f"{base}/{name}"
+        size = int(it.get("size") or 0)
+        if size > best_size:
+            best, best_size = f"{base}/{name}", size
+    return best
+
+
+@mcp.tool()
+def fetch_filings(ticker: str, years: int = 2, dest_root: str = "",
+                  include: str = "annual,quarterly,earnings") -> str:
+    """Download a US filer's annual reports, quarterlies and earnings releases to disk.
+
+    Saves to <dest_root>/<TICKER>/ as <TICKER>_<period>_<kind>_<form>.htm, which sorts
+    chronologically. Never overwrites an existing file — an analysis that already cited
+    a document must keep citing the same bytes.
+
+    Handles three things a naive fetcher gets wrong: foreign private issuers file 20-F
+    and 6-K rather than 10-K and 10-Q; an 8-K's real content is an EX-99.1 exhibit, not
+    its primary document; and most 8-Ks are director changes, so only Item 2.02 counts
+    as earnings.
+
+    Args:
+        ticker: US-listed ticker. Non-SEC filers (unsponsored ADRs, or
+            Tokyo/London primary listings) have nothing here — use fetch_ir_document.
+        years: How many annual reports; quarterlies and earnings scale at 4x.
+        dest_root: Where to write. Default: ./wj-records/sources
+        include: Comma-separated subset of annual,quarterly,earnings.
+    """
+    info = _lookup_cik(ticker)
+    if not info:
+        return _err(
+            f"'{ticker.upper()}' is not in the SEC ticker map. Unsponsored ADRs and "
+            "non-US primary listings file with their home exchange (HKEX, TSE, LSE), "
+            "not EDGAR. Use fetch_ir_document with a URL from the company's IR page."
+        )
+    want = {w.strip() for w in include.split(",") if w.strip()}
+    cik10 = f"{info['cik']:010d}"
+    subs = _sec_json(f"https://data.sec.gov/submissions/CIK{cik10}.json", f"subs_{cik10}", 3600)
+    rec = subs.get("filings", {}).get("recent", {})
+    n = len(rec.get("accessionNumber", []))
+
+    budget = {"annual": years if "annual" in want else 0,
+              "quarterly": years * 4 if "quarterly" in want else 0,
+              "earnings": years * 4 if "earnings" in want else 0}
+    dest = _dest_dir(ticker, dest_root)
+    saved, skipped, failed = [], [], []
+
+    for i in range(n):
+        if not any(budget.values()):
+            break
+        form = rec["form"][i]
+        filed = rec["filingDate"][i]
+        period = (rec.get("reportDate") or [""] * n)[i] or filed
+        acc = rec["accessionNumber"][i]
+        items = (rec.get("items") or [""] * n)[i] or ""
+        acc_nodash = acc.replace("-", "")
+        base = f"https://www.sec.gov/Archives/edgar/data/{info['cik']}/{acc_nodash}"
+
+        if form in ANNUAL_FORMS and budget["annual"]:
+            kind, url = "annual", f"{base}/{rec['primaryDocument'][i]}"
+        elif form in QUARTERLY_FORMS and budget["quarterly"]:
+            kind, url = "quarterly", f"{base}/{rec['primaryDocument'][i]}"
+        elif form == "8-K" and EARNINGS_ITEM in items and budget["earnings"]:
+            url = _earnings_exhibit(info["cik"], acc)
+            if not url:
+                continue
+            kind = "earnings-release"
+        else:
+            continue
+
+        name = f"{_safe_name(ticker.upper())}_{period}_{kind}_{_safe_name(form)}.htm"
+        path = dest / name
+        if path.exists():
+            skipped.append(name)
+            budget[kind.split("-")[0]] -= 1
+            continue
+        try:
+            path.write_bytes(_get(url, headers=HEADERS_SEC).content)
+            saved.append({"file": name, "form": form, "period": period,
+                          "kb": round(path.stat().st_size / 1024), "url": url})
+            budget[kind.split("-")[0]] -= 1
+        except Exception as e:
+            failed.append({"form": form, "filed": filed, "error": f"{type(e).__name__}", "url": url})
+
+    return json.dumps({
+        "source": "SEC EDGAR", "company": info["name"], "cik": info["cik"],
+        "dest": str(dest), "saved": saved, "skipped": skipped, "failed": failed,
+        "note": "EDGAR has no slide decks or prepared remarks — those are never filed. "
+                "Use fetch_ir_document for them.",
+    })
+
+
+@mcp.tool()
+def fetch_ir_document(ticker: str, url: str, name: str,
+                      expect: str = "pdf", dest_root: str = "") -> str:
+    """Download one investor-relations document: shareholder letter, slide deck, remarks.
+
+    EDGAR holds no presentations and no prepared remarks, yet those often carry the
+    operating metrics and the forward guidance the 10-Q legally omits. This covers that
+    gap, with checks, because a mistyped IR URL silently saves a styled 404 page under
+    a .pdf name and the error only surfaces when someone tries to read it.
+
+    Refuses: non-https URLs; redirects that leave the original host; and content whose
+    leading bytes do not match `expect`. Nothing is written to disk unless all pass.
+
+    The URL must come from the company's own IR page — never from a search result.
+
+    Args:
+        ticker: Ticker, used only for the destination folder.
+        url: Direct https URL to the document.
+        name: Filename stem, e.g. "2026-06-30_shareholder-letter".
+        expect: pdf | zip/xlsx | html | "" to skip the content check.
+        dest_root: Where to write. Default: ./wj-records/sources
+    """
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return _err(f"refusing non-https URL: {url}")
+    start_host = (parsed.hostname or "").lower()
+
+    try:
+        with httpx.Client(timeout=60, follow_redirects=False) as c:
+            hdrs = {"User-Agent": SEC_UA}
+            r = c.get(url, headers=hdrs)
+            hops = 0
+            while r.is_redirect and hops < 3:
+                nxt = httpx.URL(url).join(str(r.headers.get("location", "")))
+                if (nxt.host or "").lower() != start_host:
+                    return _err(f"redirect leaves {start_host} for {nxt.host} — not following")
+                r = c.get(nxt, headers=hdrs)
+                hops += 1
+            r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        return _err(f"HTTP {e.response.status_code} — nothing saved. Check the URL.")
+    except Exception as e:
+        return _err(f"{type(e).__name__} — nothing saved.")
+
+    kind = _sniff(r.content)
+    if expect and kind != expect:
+        return _err(
+            f"expected {expect}, got {kind} ({len(r.content):,} bytes). A 404 page saved "
+            "as .pdf is the usual cause — check the URL.", detected=kind)
+
+    ext = {"pdf": "pdf", "zip/xlsx": "xlsx", "html": "htm"}.get(kind, "bin")
+    dest = _dest_dir(ticker, dest_root)
+    path = dest / f"{_safe_name(ticker.upper())}_{_safe_name(name)}.{ext}"
+    path.write_bytes(r.content)
+
+    host_known = any(start_host == k or start_host.endswith("." + k) for k in KNOWN_IR_HOSTS)
+    return json.dumps({
+        "saved": str(path), "bytes": len(r.content), "kind": kind, "host": start_host,
+        "known_ir_host": host_known,
+        "note": "" if host_known else "Host is not a known IR provider — confirm it is official.",
     })
 
 

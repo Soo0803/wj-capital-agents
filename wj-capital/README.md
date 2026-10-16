@@ -45,6 +45,19 @@ Primary-source financial data, free endpoints, with provenance on every figure:
 | `get_company_profile`, `get_prices` | yfinance (screening-grade), Stooq fallback |
 | `get_fx_rate` | Frankfurter (ECB/central banks) |
 | `screen_by_metric` | SEC XBRL frames (cross-sectional screens) |
+| `fetch_filings` | Saves annual reports, quarterlies and earnings releases to disk |
+| `fetch_ir_document` | Saves one IR document — shareholder letter, deck, prepared remarks |
+
+The last two **write files** rather than returning text. An analysis that cites a
+filing needs that filing to still exist a year later: IR sites rotate URLs and
+EDGAR's rendering changes. `fetch_filings` handles the three things a naive fetcher
+gets wrong — foreign private issuers file 20-F/6-K rather than 10-K/10-Q, an 8-K's
+real content sits in an EX-99.1 exhibit rather than its primary document, and most
+8-Ks are director changes so only Item 2.02 counts as earnings. It never overwrites.
+`fetch_ir_document` refuses non-https URLs, redirects that leave the host, and
+content whose bytes do not match the expected format — a styled 404 page saved under
+a `.pdf` name is the common real failure, and nothing reaches disk unless every
+check passes.
 
 ## Setup
 
