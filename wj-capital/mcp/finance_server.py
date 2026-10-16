@@ -156,7 +156,13 @@ SUPERINVESTORS = {
     "pabrai": (1549575, "Dalal Street / Pabrai Funds (Pabrai)"),
     "oaktree": (949509, "Oaktree Capital (Marks)"),
     "aquamarine": (1426749, "Aquamarine Capital (Guy Spier)"),
-    "greenlein": (1079114, "Sequoia / Ruane Cunniff"),
+    # CIK 1079114 is Greenlea Lane Capital, not Sequoia/Ruane Cunniff — the label
+    # was wrong as well as the key. Verified against the 13F: Green Brick Partners
+    # at ~29% is Greenlea Lane's signature position, and Ruane Cunniff files under
+    # its own CIK. Same failure mode as the Pabrai entry: a plausible mapping
+    # returns the WRONG manager silently rather than erroring, so verify any new
+    # row against a recent 13F-HR information table before adding it.
+    "greenlea": (1079114, "Greenlea Lane Capital [last filed 2024-02; may be below the $100M threshold]"),
     "markel": (1096343, "Markel Gayner"),
     "tweedy": (732905, "Tweedy Browne"),
     "fairfax": (915191, "Fairfax Financial (Watsa)"),

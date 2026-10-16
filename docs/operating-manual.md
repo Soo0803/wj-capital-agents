@@ -148,9 +148,9 @@ The full doctrine travels inside the plugin and loads automatically during inves
 ## Part VI — Installation, Operations, and Growth
 
 ### 6.1 Installation
-- Install the wj-capital.plugin file in Claude (Cowork: accept the plugin preview; Claude Code: unzip into a plugin marketplace directory or install per the plugins documentation).
-- Ensure Python 3.10+ is available, then: pip install -r mcp/requirements.txt (mcp, httpx, yfinance). The wj-finance server starts automatically with your sessions.
-- Optionally set SEC_EDGAR_USER_AGENT to your own "Name email@example.com" (SEC etiquette; a default with your email is configured).
+- **Set `SEC_EDGAR_USER_AGENT` to your own name and email first.** This is required, not optional: the server refuses to start without it, by design. SEC EDGAR throttles and blocks by *identity* rather than by IP, so a shipped default would mean every installation worldwide scraping as the same person — one heavy user getting everyone else blocked, with the traffic attributed to whoever's address it was. Put `export SEC_EDGAR_USER_AGENT="Your Name you@example.com"` in your shell profile so it is set before Claude Code launches.
+- Install the plugin: `claude plugin marketplace add <owner>/wj-capital-agents` then `claude plugin install wj-capital@wj-capital-agents`.
+- Build the finance server's virtualenv: `cd "$(claude plugin details wj-capital --path)" && ./install.sh`. A venv rather than a bare `pip install` because modern Pythons (Homebrew, Debian) refuse to install into the system interpreter — PEP 668 — and `.mcp.json` invokes `mcp/.venv/bin/python` by path. The script is safe to re-run; it repairs a half-built environment and tells you exactly what is wrong if the server will not start.
 - Work from one permanent folder. The firm’s memory lives in wj-records/ (memos, journal, letters, post-mortems, watchlist, portfolio) — back it up; it is the compounding asset.
 
 ### 6.2 First week
